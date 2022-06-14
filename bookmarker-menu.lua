@@ -264,7 +264,7 @@ end
 function getFilepath(filename)
   if isWindows() then
   	return os.getenv("APPDATA"):gsub("\\", "/") .. "/mpv/" .. filename
-  else	
+  else
 	return os.getenv("HOME") .. "/.config/mpv/" .. filename
   end
 end
@@ -610,7 +610,7 @@ function displayBookmarks()
   local endSlot = getLastSlotOnPage(currentPage)
 
   -- Prepare the text to display and display it
-  local display = styleOn .. "{\\b1}Bookmarks page " .. currentPage .. "/" .. maxPage .. ":{\\b0}"
+  local display = styleOn .. "{\\b1}" .. currentPage .. "/" .. maxPage .. ":{\\b0} (Enter: Open, Fn-Del: Delete, p: Replace, s: New Save)"
   for i = startSlot, endSlot do
     local btext = displayName(bookmarks[i]["name"])
     local selection = ""
