@@ -15,6 +15,8 @@ local confirmReplace = false
 local confirmDelete = false
 -- The rate (in seconds) at which the bookmarker needs to refresh its interface; lower is more frequent
 local rate = 1.5
+-- Enable support for uosc
+local uoscEnable = true
 -- The filename for the bookmarks file
 local bookmarkerName = "bookmarker.json"
 
@@ -30,7 +32,8 @@ local active = false
 local mode = "none"
 local bookmarkStore = {}
 local oldSlot = 0
-
+local uosc_available = false
+local script_name = mp.get_script_name()
 -- // Controls \\ --
 
 -- List of custom controls and their function
@@ -264,7 +267,7 @@ end
 function getFilepath(filename)
   if isWindows() then
   	return os.getenv("APPDATA"):gsub("\\", "/") .. "/mpv/" .. filename
-  else
+  else	
 	return os.getenv("HOME") .. "/.config/mpv/" .. filename
   end
 end
@@ -610,18 +613,70 @@ function displayBookmarks()
   local endSlot = getLastSlotOnPage(currentPage)
 
   -- Prepare the text to display and display it
-  local display = styleOn .. "{\\b1}" .. currentPage .. "/" .. maxPage .. ":{\\b0} (Enter: Open, Fn-Del: Delete, p: Replace, s: New Save)"
-  for i = startSlot, endSlot do
-    local btext = displayName(bookmarks[i]["name"])
-    local selection = ""
-    if i == currentSlot then
-      selection = "{\\b1}{\\c&H00FFFF&}>"
-      if mode == "move" then btext = "----------------" end
-      btext = btext
+  if uosc_available then
+    local items = {}
+    for i = startSlot, endSlot do
+      local opt = "start=" .. bookmarks[i]["pos"]
+      local title = bookmarks[i]["name"]
+      items[#items+1] = {
+        title = title:sub(1,title:len()-4),
+        value = {
+          "loadfile",
+          bookmarks[i]["path"],
+          "replace",
+          opt,
+        },
+        hint = parseTime(bookmarks[i]["pos"])
+      }
     end
-    display = display .. "\n" .. selection .. i .. ": " .. btext .. "{\\r}"
+    if currentPage < maxPage then
+      items[#items+1] = {
+        title = "...",
+        value = {
+          "script-binding",
+          script_name .. "/bookmarkerRIGHT",
+        },
+        hint = "Next Page",
+        keep_open = true,
+        icon = "navigate_next",
+      }
+    end
+    if currentPage > 1 then
+      table.insert(items, 1, {
+        title = "...",
+        value = {
+          "script-binding",
+          script_name .. "/bookmarkerLEFT",
+        },
+        hint = "Last Page",
+        keep_open = true,
+        icon = "navigate_before",
+      })
+    end
+    local menu = {
+      type = "bookmark",
+      title = "BookMark",
+      items = items,
+      on_close = {
+        "script-binding",
+        script_name .. "/bookmarkerESC",
+      },
+    }
+    mp.commandv('script-message-to', 'uosc', active and 'update-menu' or 'open-menu', utils.format_json(menu))
+  else
+    local display = styleOn .. "{\\b1}Bookmarks page " .. currentPage .. "/" .. maxPage .. ":{\\b0}"
+    for i = startSlot, endSlot do
+      local btext = displayName(bookmarks[i]["name"])
+      local selection = ""
+      if i == currentSlot then
+        selection = "{\\b1}{\\c&H00FFFF&}>"
+        if mode == "move" then btext = "----------------" end
+        btext = btext
+      end
+      display = display .. "\n" .. selection .. i .. ": " .. btext .. "{\\r}"
+    end
+    mp.osd_message(display, rate)
   end
-  mp.osd_message(display, rate)
 end
 
 local timer = mp.add_periodic_timer(rate * 0.95, displayBookmarks)
@@ -649,7 +704,9 @@ end
 function typerExit()
   deactivateTyper()
   displayBookmarks()
-  timer:resume()
+  if not uosc_available then
+    timer:resume()
+  end
   mode = "none"
   activateControls("bookmarker", bookmarkerControls, bookmarkerFlags)
 end
@@ -671,7 +728,9 @@ function typerStart()
   end
 
   deactivateControls("bookmarker", bookmarkerControls)
-  timer:kill()
+  if not uosc_available then
+    timer:kill()
+  end
   activateTyper()
   if mode == "rename" then typerText = bookmarks[currentSlot]["name"] end
   if mode == "filepath" then typerText = bookmarks[currentSlot]["path"] end
@@ -685,7 +744,9 @@ function abort(message)
   moverExit(true)
   deactivateTyper()
   deactivateControls("bookmarker", bookmarkerControls)
-  timer:kill()
+  if not uosc_available then
+    timer:kill()
+  end
   mp.osd_message(message)
   active = false
 end
@@ -698,9 +759,32 @@ function handler()
     activateControls("bookmarker", bookmarkerControls, bookmarkerFlags)
     loadBookmarks()
     displayBookmarks()
-    timer:resume()
+    if not uosc_available then
+      timer:resume()
+    end
     active = true
   end
+end
+
+if uoscEnable then
+  mp.register_script_message("uosc-version", function(version)
+    local function semver_comp(v1, v2)
+        local v1_iterator = v1:gmatch("%d+")
+        local v2_iterator = v2:gmatch("%d+")
+        for v2_num_str in v2_iterator do
+            local v1_num_str = v1_iterator()
+            if not v1_num_str then return true end
+            local v1_num = tonumber(v1_num_str)
+            local v2_num = tonumber(v2_num_str)
+            if v1_num < v2_num then return true end
+            if v1_num > v2_num then return false end
+        end
+        return false
+    end
+
+    local min_version = "5.0.0"
+    uosc_available = not semver_comp(version, min_version)
+  end)
 end
 
 mp.register_script_message("bookmarker-menu", handler)
