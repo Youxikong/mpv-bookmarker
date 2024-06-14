@@ -13,9 +13,9 @@ A bookmarker menu to manage all your bookmarks in MPV. This script is based on [
 
 ## Planned features
 
-* Allow custom tags for bookmark styling
-* Undo function
-* Redo function
+* <del>Allow custom tags for bookmark styling <\del>
+* <del>Undo function <\del>
+* <del>Redo function <\del>
 
 ## Installation
 
